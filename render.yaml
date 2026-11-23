@@ -1,0 +1,30 @@
+# Render Blueprint. Deploy with: Dashboard -> New -> Blueprint -> pick this repo.
+# Free-tier notes (verified against Render docs): free web services sleep after 15 min idle;
+# background workers have no free plan, so the worker runs inside the API process
+# (TF_EMBEDDED_WORKER=true); the free Key Value store is in-memory and loses data on restart.
+services:
+  - type: web
+    name: taskforge-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /readyz
+    envVars:
+      - key: TF_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: taskforge-redis
+          property: connectionString
+      - key: TF_API_KEYS
+        generateValue: true      # read the generated value in the Render dashboard
+      - key: TF_METRICS_TOKEN
+        generateValue: true
+      - key: TF_EMBEDDED_WORKER
+        value: "true"
+      - key: TF_LOG_LEVEL
+        value: INFO
+
+  - type: keyvalue
+    name: taskforge-redis
+    plan: free
+    maxmemoryPolicy: noeviction   # evicting queue keys would silently drop jobs
+    ipAllowList: []               # internal access only

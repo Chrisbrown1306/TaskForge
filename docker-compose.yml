@@ -1,0 +1,36 @@
+# Local stack: Redis + API + a standalone worker.
+#   docker compose up --build
+#   curl -H "X-API-Key: dev-key-change-me" localhost:8000/v1/queue/stats
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment: &app-env
+      TF_REDIS_URL: redis://redis:6379/0
+      TF_API_KEYS: ${TF_API_KEYS:-dev-key-change-me}
+      TF_LOG_LEVEL: ${TF_LOG_LEVEL:-INFO}
+    depends_on:
+      redis: { condition: service_healthy }
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    environment: *app-env
+    depends_on:
+      redis: { condition: service_healthy }
+    deploy:
+      replicas: 2   # workers are stateless; add more to scale throughput
+    stop_grace_period: 30s   # lets in-flight jobs finish on SIGTERM
+
+volumes:
+  redis-data:
