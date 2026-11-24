@@ -6,7 +6,7 @@ A reliable background-job queue with a distributed rate limiter, built on **Fast
 Jobs survive worker crashes, retry with exponential backoff, land in a dead-letter queue when they
 keep failing, and can be submitted idempotently.
 
-!\[CI](https://github.com/Chrisbrown1306/taskforge/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Chrisbrown1306/taskforge/actions/workflows/ci.yml/badge.svg)
 
 ## Features
 
@@ -23,14 +23,14 @@ keep failing, and can be submitted idempotently.
 
 ```mermaid
 flowchart LR
-    C\\\[Client] -->|POST /v1/jobs<br/>X-API-Key| API\\\[FastAPI API]
-    API -->|token bucket<br/>Lua| R\\\[(Redis)]
+    C[Client] -->|POST /v1/jobs<br/>X-API-Key| API[FastAPI API]
+    API -->|token bucket<br/>Lua| R[(Redis)]
     API -->|enqueue<br/>Lua| R
-    W1\\\[Worker] -->|BLMOVE + claim<br/>Lua| R
-    W2\\\[Worker] --> R
+    W1[Worker] -->|BLMOVE + claim<br/>Lua| R
+    W2[Worker] --> R
     W1 -->|complete / retry / dead<br/>Lua| R
-    REAPER\\\[Reaper loop in every worker] -->|reclaim expired| R
-    PROM\\\[Prometheus] -->|scrape /metrics| API
+    REAPER[Reaper loop in every worker] -->|reclaim expired| R
+    PROM[Prometheus] -->|scrape /metrics| API
 ```
 
 Redis keys (prefix `tf`): `job:<id>` (hash), `queue:ready` (list), `queue:delayed` (zset by run-at),
@@ -46,7 +46,7 @@ Redis keys (prefix `tf`): `job:<id>` (hash), `queue:ready` (list), `queue:delaye
 |**At-least-once**, not exactly-once|Exactly-once is not achievable across a crash without cooperation from the job's side effects. Handlers must be idempotent; the claim script also skips jobs already finished, which suppresses most duplicates.|
 |Reaper **adopts orphans**|A worker can die between `BLMOVE` and the claim script, leaving an id in `processing` with no deadline. The reaper gives it one so it is retried rather than stuck forever.|
 |**Blocking connection pool**|Under a burst, requests wait for a connection instead of failing. (Found by a failing concurrency test.)|
-|Raw API keys are **never stored**|Redis only sees `sha256(key)\\\[:16]`; keys are compared with `hmac.compare\\\_digest`.|
+|Raw API keys are **never stored**|Redis only sees `sha256(key)[:16]`; keys are compared with `hmac.compare\\\_digest`.|
 |State is **Redis only**|One dependency to run, and nothing that expires on free hosting tiers. Trade-off: durability depends on Redis persistence (AOF in `docker-compose.yml`).|
 
 ## Quick start
@@ -56,7 +56,7 @@ docker compose up --build        # redis + api + 2 workers
 curl -s -X POST localhost:8000/v1/jobs \\\\
   -H "X-API-Key: dev-key-change-me" -H "Idempotency-Key: demo-1" \\\\
   -H "Content-Type: application/json" \\\\
-  -d '{"type":"sum","payload":{"numbers":\\\[1,2,3]}}'
+  -d '{"type":"sum","payload":{"numbers":[1,2,3]}}'
 # {"id":"<job-id>","status":"queued","duplicate":false}
 
 curl -s -H "X-API-Key: dev-key-change-me" localhost:8000/v1/jobs/<job-id>
@@ -93,15 +93,16 @@ via the reaper, orphan adoption, retry/DLQ flow, graceful shutdown, tenant isola
 when Redis is down.
 
 
-Kubernetes deployment with Prometheus alerts and a Grafana dashboard: see \[deploy/README.md](deploy/README.md).
+Kubernetes deployment with Prometheus alerts and a Grafana dashboard: see [deploy/README.md](deploy/README.md).
 
+| Manifests applied to a Docker Desktop (kind) cluster: all pods healthy, HPA reading metrics, dashboard populated, dead-letter alert fired, worker pods replaced | Verified |
+| HPA actually scaling under load, NetworkPolicy enforcement | Not verified |
 
+![Grafana dashboard](docs/grafana-dashboard.png)
 
-!\[Grafana dashboard](docs/grafana-dashboard.png)
+![Prometheus alert firing](docs/prometheus-alert.png)
 
-!\[Prometheus alert firing](docs/prometheus-alert.png)
-
-
+![Worker self-healing](docs/pods-self-healing.png)
 
 ## Benchmarks
 
