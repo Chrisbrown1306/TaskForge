@@ -11,6 +11,11 @@ from prometheus_client import CollectorRegistry, Counter, Histogram
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 from prometheus_client.registry import Collector
 
+# Every counter is always published (as 0 until the first event). A series that first appears
+# with a non-zero value makes Prometheus' rate()/increase() miss that first event, so e.g. the
+# very first dead-lettered job would never trigger an alert.
+JOB_EVENTS = ("enqueued", "succeeded", "retried", "dead", "reaped")
+
 
 class QueueCollector(Collector):
     def __init__(self) -> None:
@@ -23,8 +28,10 @@ class QueueCollector(Collector):
         yield depth
 
         jobs = CounterMetricFamily("taskforge_jobs", "Cumulative job events", labels=["event"])
-        for event, value in self.snapshot.get("counters", {}).items():
-            jobs.add_metric([event], value)
+        if self.snapshot:  # empty snapshot = Redis unreachable; publish nothing rather than fake zeros
+            counters = self.snapshot.get("counters", {})
+            for event in JOB_EVENTS:
+                jobs.add_metric([event], counters.get(event, 0))
         yield jobs
 
 

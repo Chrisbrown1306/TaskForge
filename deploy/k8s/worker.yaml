@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskforge-worker
+  labels: &labels
+    app.kubernetes.io/name: taskforge
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: taskforge
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskforge
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      # Must exceed TF_SHUTDOWN_GRACE_S (20s) so in-flight jobs can finish on SIGTERM.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: worker
+          image: ghcr.io/chrisbrown1306/taskforge:latest
+          command: ["python", "-m", "app.worker"]
+          envFrom:
+            - configMapRef: {name: taskforge-config}
+            - secretRef: {name: taskforge-secrets}
+          resources:
+            requests: {cpu: 100m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: taskforge-worker
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: taskforge-worker}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

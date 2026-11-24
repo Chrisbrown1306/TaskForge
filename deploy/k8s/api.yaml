@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskforge-api
+  labels: &labels
+    app.kubernetes.io/name: taskforge
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: taskforge
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}   # never drop below desired capacity during a rollout
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskforge
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001   # matches USER in the Dockerfile
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: api
+          image: ghcr.io/chrisbrown1306/taskforge:latest
+          ports:
+            - {name: http, containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: taskforge-config}
+            - secretRef: {name: taskforge-secrets}   # TF_API_KEYS, created by up.ps1
+          env:
+            - {name: PORT, value: "8000"}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:            # fails when Redis is unreachable, so the pod leaves the Service
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+          livenessProbe:             # does NOT depend on Redis, so a Redis outage does not restart-loop the API
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskforge-api
+  labels:
+    app.kubernetes.io/name: taskforge
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: taskforge
+    app.kubernetes.io/component: api
+  ports:
+    - {name: http, port: 80, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: taskforge-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskforge
+      app.kubernetes.io/component: api
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: taskforge-api
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: taskforge-api}
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

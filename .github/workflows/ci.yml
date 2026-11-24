@@ -46,6 +46,24 @@ jobs:
       - name: Test (real Redis, 85% coverage gate)
         run: pytest --cov=app --cov-report=term-missing --cov-fail-under=85
 
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform and promtool
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          curl -fsSL https://github.com/prometheus/prometheus/releases/download/v3.4.0/prometheus-3.4.0.linux-amd64.tar.gz | tar xz --strip-components=1 prometheus-3.4.0.linux-amd64/promtool
+
+      - name: Render and schema-validate Kubernetes manifests
+        run: |
+          kubectl kustomize deploy/k8s > rendered.yaml
+          ./kubeconform -strict -summary -kubernetes-version 1.31.0 rendered.yaml
+
+      - name: Validate Prometheus alert rules
+        run: ./promtool check rules deploy/k8s/monitoring/files/rules.yml
+
   image:
     needs: test
     runs-on: ubuntu-latest

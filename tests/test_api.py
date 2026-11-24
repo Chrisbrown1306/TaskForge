@@ -114,6 +114,13 @@ def test_metrics_exposes_queue_and_http_stats(client):
     assert 'route="/v1/jobs"' in text
 
 
+def test_metrics_publish_all_counters_from_zero(client):
+    """Counters must exist at 0 before any event, or Prometheus misses the first one."""
+    text = client.get("/metrics").text
+    for event in ("enqueued", "succeeded", "retried", "dead", "reaped"):
+        assert f'taskforge_jobs_total{{event="{event}"}} 0.0' in text
+
+
 def test_metrics_token_protects_endpoint(settings):
     settings.metrics_token = "s3cret"
     with TestClient(create_app(settings)) as c:

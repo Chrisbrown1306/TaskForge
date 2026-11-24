@@ -1,0 +1,39 @@
+# Queue gauges and job counters are read from Redis, so EVERY API pod reports the same
+# fleet-wide values. Aggregate those with max(), never sum(). HTTP metrics are per pod,
+# so those use sum().
+groups:
+  - name: taskforge
+    rules:
+      - alert: TaskForgeAPIDown
+        expr: absent(up{job="taskforge-api"} == 1)
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: No TaskForge API instance is being scraped successfully
+
+      - alert: JobsEnteringDeadLetterQueue
+        expr: max(increase(taskforge_jobs_total{event="dead"}[10m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Jobs exhausted their retries and landed in the dead-letter queue
+
+      - alert: QueueBacklogHigh
+        expr: max(taskforge_queue_depth{queue="ready"}) > 1000
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 1000 jobs have been waiting for 5 minutes (scale workers?)
+
+      - alert: WorkersNotProcessing
+        expr: max(taskforge_queue_depth{queue="ready"}) > 0 and max(rate(taskforge_jobs_total{event="succeeded"}[5m])) == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Jobs are queued but none have completed for 5 minutes (workers down or stuck)
+
+      - alert: HighHTTPErrorRate
+        expr: sum(rate(taskforge_http_requests_total{status=~"5.."}[5m])) / sum(rate(taskforge_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 5% of API requests are failing with 5xx

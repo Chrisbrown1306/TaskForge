@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: taskforge
+
+resources:
+  - namespace.yaml
+  - redis.yaml
+  - api.yaml
+  - worker.yaml
+  - networkpolicy.yaml
+  - monitoring/prometheus.yaml
+  - monitoring/grafana.yaml
+
+# Pin a specific image tag here instead of "latest" for reproducible deploys,
+# e.g. newTag: sha-69809e3 (CI publishes a tag per commit).
+images:
+  - name: ghcr.io/chrisbrown1306/taskforge
+    newTag: latest
+
+# Generated ConfigMaps get a content hash in their name, so editing a value rolls the pods.
+configMapGenerator:
+  - name: taskforge-config
+    literals:
+      - TF_REDIS_URL=redis://redis:6379/0
+      - TF_LOG_LEVEL=INFO
+      - TF_WORKER_CONCURRENCY=4
+      - TF_EMBEDDED_WORKER=false
+      - TF_RATE_LIMIT_CAPACITY=20
+      - TF_RATE_LIMIT_REFILL_PER_SEC=10
+  - name: prometheus-config
+    files: [monitoring/files/prometheus.yml]
+  - name: prometheus-rules
+    files: [monitoring/files/rules.yml]
+  - name: grafana-datasource
+    files: [monitoring/files/grafana-datasource.yaml]
+  - name: grafana-dashboard-provider
+    files: [monitoring/files/grafana-dashboards.yaml]
+  - name: grafana-dashboards
+    files: [monitoring/files/taskforge-dashboard.json]
