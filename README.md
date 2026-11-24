@@ -23,14 +23,14 @@ keep failing, and can be submitted idempotently.
 
 ```mermaid
 flowchart LR
-    C\[Client] -->|POST /v1/jobs<br/>X-API-Key| API\[FastAPI API]
-    API -->|token bucket<br/>Lua| R\[(Redis)]
+    C\\\[Client] -->|POST /v1/jobs<br/>X-API-Key| API\\\[FastAPI API]
+    API -->|token bucket<br/>Lua| R\\\[(Redis)]
     API -->|enqueue<br/>Lua| R
-    W1\[Worker] -->|BLMOVE + claim<br/>Lua| R
-    W2\[Worker] --> R
+    W1\\\[Worker] -->|BLMOVE + claim<br/>Lua| R
+    W2\\\[Worker] --> R
     W1 -->|complete / retry / dead<br/>Lua| R
-    REAPER\[Reaper loop in every worker] -->|reclaim expired| R
-    PROM\[Prometheus] -->|scrape /metrics| API
+    REAPER\\\[Reaper loop in every worker] -->|reclaim expired| R
+    PROM\\\[Prometheus] -->|scrape /metrics| API
 ```
 
 Redis keys (prefix `tf`): `job:<id>` (hash), `queue:ready` (list), `queue:delayed` (zset by run-at),
@@ -46,33 +46,33 @@ Redis keys (prefix `tf`): `job:<id>` (hash), `queue:ready` (list), `queue:delaye
 |**At-least-once**, not exactly-once|Exactly-once is not achievable across a crash without cooperation from the job's side effects. Handlers must be idempotent; the claim script also skips jobs already finished, which suppresses most duplicates.|
 |Reaper **adopts orphans**|A worker can die between `BLMOVE` and the claim script, leaving an id in `processing` with no deadline. The reaper gives it one so it is retried rather than stuck forever.|
 |**Blocking connection pool**|Under a burst, requests wait for a connection instead of failing. (Found by a failing concurrency test.)|
-|Raw API keys are **never stored**|Redis only sees `sha256(key)\[:16]`; keys are compared with `hmac.compare\_digest`.|
+|Raw API keys are **never stored**|Redis only sees `sha256(key)\\\[:16]`; keys are compared with `hmac.compare\\\_digest`.|
 |State is **Redis only**|One dependency to run, and nothing that expires on free hosting tiers. Trade-off: durability depends on Redis persistence (AOF in `docker-compose.yml`).|
 
 ## Quick start
 
 ```bash
 docker compose up --build        # redis + api + 2 workers
-curl -s -X POST localhost:8000/v1/jobs \\
-  -H "X-API-Key: dev-key-change-me" -H "Idempotency-Key: demo-1" \\
-  -H "Content-Type: application/json" \\
-  -d '{"type":"sum","payload":{"numbers":\[1,2,3]}}'
+curl -s -X POST localhost:8000/v1/jobs \\\\
+  -H "X-API-Key: dev-key-change-me" -H "Idempotency-Key: demo-1" \\\\
+  -H "Content-Type: application/json" \\\\
+  -d '{"type":"sum","payload":{"numbers":\\\[1,2,3]}}'
 # {"id":"<job-id>","status":"queued","duplicate":false}
 
 curl -s -H "X-API-Key: dev-key-change-me" localhost:8000/v1/jobs/<job-id>
-curl -s localhost:8000/metrics | grep taskforge\_
+curl -s localhost:8000/metrics | grep taskforge\\\_
 ```
 
 Interactive API docs: `http://localhost:8000/docs`.
 
 Without Docker: `pip install -r requirements-dev.txt`, start Redis, then
-`TF\_API\_KEYS=dev uvicorn app.main:app` and `python -m app.worker` in two terminals.
+`TF\\\_API\\\_KEYS=dev uvicorn app.main:app` and `python -m app.worker` in two terminals.
 
 ### API
 
 |Method \& path|Purpose|
 |-|-|
-|`POST /v1/jobs`|Enqueue `{type, payload, max\_attempts?, delay\_seconds?}`. `202` new, `200` idempotent replay.|
+|`POST /v1/jobs`|Enqueue `{type, payload, max\\\_attempts?, delay\\\_seconds?}`. `202` new, `200` idempotent replay.|
 |`GET /v1/jobs/{id}`|Status, attempts, result or last error.|
 |`POST /v1/jobs/{id}/retry`|Replay a job from the dead-letter queue.|
 |`GET /v1/queue/stats`|Queue depths and cumulative counters.|
@@ -84,13 +84,24 @@ Built-in job types: `echo`, `sum`, `sleep`, `fail`, `flaky`. Add your own with `
 
 ```bash
 pytest --cov=app        # needs Redis on localhost:6379 (tests use DB 15 only)
-ruff check . \&\& ruff format --check .
+ruff check . \\\&\\\& ruff format --check .
 ```
 
 37 tests, 92% line coverage, run against a **real Redis** (not a mock). They cover atomicity under
 200 concurrent rate-limit callers, no double-delivery under 50 concurrent claims, crash recovery
 via the reaper, orphan adoption, retry/DLQ flow, graceful shutdown, tenant isolation, and 503 behaviour
 when Redis is down.
+
+
+Kubernetes deployment with Prometheus alerts and a Grafana dashboard: see \[deploy/README.md](deploy/README.md).
+
+
+
+!\[Grafana dashboard](docs/grafana-dashboard.png)
+
+!\[Prometheus alert firing](docs/prometheus-alert.png)
+
+
 
 ## Benchmarks
 
@@ -110,8 +121,8 @@ here; run `python scripts/bench.py worker --processes N` on a multi-core machine
 ## Deploy
 
 **Render (free tier, GitHub only):** push this repo to GitHub → Render dashboard → *New → Blueprint* →
-select the repo. `render.yaml` creates the API (Docker) and a Key Value instance, wires `TF\_REDIS\_URL`,
-generates `TF\_API\_KEYS`, and runs the worker inside the API process.
+select the repo. `render.yaml` creates the API (Docker) and a Key Value instance, wires `TF\\\_REDIS\\\_URL`,
+generates `TF\\\_API\\\_KEYS`, and runs the worker inside the API process.
 
 Free-tier caveats (from Render's docs): the service sleeps after 15 minutes idle (first request takes
 about a minute), and the free Key Value store is in-memory, so queued jobs are lost if it restarts.
@@ -123,10 +134,10 @@ and run `python -m app.worker` as a separate process for real deployments.
 
 ## Configuration
 
-All settings are environment variables prefixed `TF\_` (see `.env.example` and `app/config.py`):
-`REDIS\_URL`, `API\_KEYS`, `RATE\_LIMIT\_CAPACITY`, `RATE\_LIMIT\_REFILL\_PER\_SEC`, `VISIBILITY\_TIMEOUT\_S`,
-`JOB\_TIMEOUT\_S`, `MAX\_ATTEMPTS\_DEFAULT`, `BACKOFF\_BASE\_S`, `WORKER\_CONCURRENCY`, `EMBEDDED\_WORKER`,
-`METRICS\_TOKEN`, `LOG\_LEVEL`.
+All settings are environment variables prefixed `TF\\\_` (see `.env.example` and `app/config.py`):
+`REDIS\\\_URL`, `API\\\_KEYS`, `RATE\\\_LIMIT\\\_CAPACITY`, `RATE\\\_LIMIT\\\_REFILL\\\_PER\\\_SEC`, `VISIBILITY\\\_TIMEOUT\\\_S`,
+`JOB\\\_TIMEOUT\\\_S`, `MAX\\\_ATTEMPTS\\\_DEFAULT`, `BACKOFF\\\_BASE\\\_S`, `WORKER\\\_CONCURRENCY`, `EMBEDDED\\\_WORKER`,
+`METRICS\\\_TOKEN`, `LOG\\\_LEVEL`.
 
 ## Known limitations
 
