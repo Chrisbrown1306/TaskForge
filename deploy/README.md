@@ -83,8 +83,9 @@ kubectl -n taskforge get hpa -w
 | All 23 rendered objects pass Kubernetes schema validation (`kubeconform`, in CI) | Verified |
 | Prometheus config and alert rules pass `promtool` | Verified |
 | Every dashboard query and alert expression returns data against a live Prometheus scraping a running TaskForge | Verified (locally, outside Kubernetes) |
-| Manifests applied to a real cluster, probes, HPA scaling, pod replacement | **Not verified by the author; run it and check** |
-| `up.ps1` | **Not syntax-checked (no PowerShell in the authoring environment)** |
+| Manifests applied to a Docker Desktop (kind) cluster: all pods healthy, HPA reading metrics, Grafana dashboard populated, dead-letter alert fired, worker pods replaced after deletion | Verified |
+| HPA actually scaling up under load | Not verified |
+| `up.ps1` | Verified: ran on Windows PowerShell and deployed the stack (needs `Set-ExecutionPolicy -Scope Process Bypass` first) |
 | NetworkPolicy enforcement | Depends on the cluster's CNI; a plain kind cluster may accept the object without enforcing it |
 
 ## Limitations
